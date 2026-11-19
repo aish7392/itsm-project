@@ -93,6 +93,9 @@ class InAppChannel(NotificationChannel):
             channel=self.channel_type.value, event=event.type.value, message=message))
 
 
+RESERVED_DOMAINS = {"example.com", "example.org", "example.net"}
+
+
 class EmailChannel(NotificationChannel):
     channel_type = ChannelType.EMAIL
 
@@ -102,8 +105,14 @@ class EmailChannel(NotificationChannel):
 
     def deliver(self, user, event, subject, message):
         body = f"Hello {user.name},\n\n{message}\n\n— I-ITSM Service Desk"
+        # reserved demo domains (RFC 2606) can never receive mail: simulate instead of bouncing
+        demo = user.email.lower().rsplit("@", 1)[-1] in RESERVED_DOMAINS
         row = EmailOutbox(recipient=user.email, subject=subject, body=body,
-                          simulated=self.gateway.simulated)
+                          simulated=self.gateway.simulated or demo)
+        if demo:
+            row.delivered = True
+            self.db.add(row)
+            return
         try:
             self.gateway.send(user.email, subject, body)
             row.delivered = True
